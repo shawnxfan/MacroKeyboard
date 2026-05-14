@@ -36,6 +36,9 @@ namespace MacroKeyboard
         private const int VK_F10 = 0x79;
         private const int VK_ESCAPE = 0x1B;
 
+        // 录制用的固定 ID（Overlay 用）
+        private const string RECORDING_OVERLAY_ID = "__recording__";
+
         public MainWindow()
         {
             InitializeComponent();
@@ -87,13 +90,11 @@ namespace MacroKeyboard
                 Visible = true
             };
 
-            // 双击托盘图标恢复窗口
             _trayIcon.DoubleClick += (_, _) => ShowMainWindow();
 
-            // 右键菜单
             var contextMenu = new Forms.ContextMenuStrip();
             contextMenu.Items.Add("显示主窗口", null, (_, _) => ShowMainWindow());
-            contextMenu.Items.Add("-"); // 分隔线
+            contextMenu.Items.Add("-");
             contextMenu.Items.Add("退出", null, (_, _) =>
             {
                 _isReallyClosing = true;
@@ -106,7 +107,6 @@ namespace MacroKeyboard
         {
             if (!_isReallyClosing)
             {
-                // 最小化到托盘而不是关闭
                 e.Cancel = true;
                 Hide();
                 _trayIcon!.ShowBalloonTip(2000, "MacroKeyboard", "已最小化到系统托盘，全局快捷键仍然有效。", Forms.ToolTipIcon.Info);
@@ -125,19 +125,13 @@ namespace MacroKeyboard
 
         private bool ShouldSuppressKey(int vkCode, bool isDown)
         {
-            // 录制/回放中不拦截 F9/F10/Esc（让它们作为控制键通过）
+            // F9/F10/Esc 始终放行（控制键）
             if (vkCode == VK_F9 || vkCode == VK_F10 || vkCode == VK_ESCAPE)
                 return false;
 
-            // 回放中按触发键：拦截（防止传给其他应用）但不丢弃事件
-            // OnGlobalKeyEvent 会在 ShouldSuppressKey 之前被调用，所以这里只管拦截
-            // 注意：这里需要让所有已绑定的触发键在回放时都被拦截（防止传给前台应用）
+            // 如果有任何宏在回放，拦截所有已绑定的触发键（防止传给前台应用）
             if (_player.IsPlaying)
             {
-                // 拦截当前正在回放的宏的触发键
-                if (_selectedMacro != null && vkCode == _selectedMacro.TriggerVirtualKeyCode)
-                    return true;
-                // 也拦截其他宏的触发键（防止回放中意外触发其他宏）
                 if (_macros.Any(m => m.IsEnabled && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0))
                     return true;
             }
@@ -147,7 +141,7 @@ namespace MacroKeyboard
 
         private void OnGlobalKeyEvent(int vkCode, bool isDown)
         {
-            if (!isDown) return; // 只处理按下事件
+            if (!isDown) return;
 
             Dispatcher.Invoke(() =>
             {
@@ -165,22 +159,22 @@ namespace MacroKeyboard
                     return;
                 }
 
-                // F10: 回放/停止切换
+                // F10: 回放当前选中的宏/停止当前选中的宏
                 if (vkCode == VK_F10)
                 {
-                    if (_player.IsPlaying)
-                        _player.Stop();
+                    if (_selectedMacro != null && _player.IsMacroPlaying(_selectedMacro.Id))
+                        _player.Stop(_selectedMacro.Id);
                     else
                         HandlePlayback();
                     return;
                 }
 
-                // Esc: 紧急停止
+                // Esc: 停止所有回放和录制
                 if (vkCode == VK_ESCAPE)
                 {
                     if (_player.IsPlaying)
                     {
-                        _player.Stop();
+                        _player.StopAll();
                         return;
                     }
                     if (_recorder.IsRecording)
@@ -196,15 +190,14 @@ namespace MacroKeyboard
                     var macro = _macros.FirstOrDefault(m => m.IsEnabled && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0);
                     if (macro != null)
                     {
-                        if (_player.IsPlaying)
+                        if (_player.IsMacroPlaying(macro.Id))
                         {
-                            // 回放中按任意宏触发键 → 停止回放
-                            _player.Stop();
+                            // 该宏正在回放 → 停止它
+                            _player.Stop(macro.Id);
                         }
                         else
                         {
-                            // 未回放 → 启动对应宏
-                            _selectedMacro = macro;
+                            // 该宏未在回放 → 启动它（不影响其他正在回放的宏）
                             _ = _player.PlayAsync(macro);
                         }
                     }
@@ -222,7 +215,7 @@ namespace MacroKeyboard
             {
                 StopRecording();
             }
-            else if (_selectedMacro != null && !_player.IsPlaying)
+            else if (_selectedMacro != null && !_player.IsMacroPlaying(_selectedMacro.Id))
             {
                 _recorder.StartRecording(_selectedMacro.RecordMouseMovement);
             }
@@ -253,9 +246,8 @@ namespace MacroKeyboard
                 EventCountText.Text = "录制中...";
                 DurationText.Text = "";
 
-                // 显示浮动提示
                 var name = _selectedMacro?.Name ?? "宏";
-                _overlay?.ShowRecording(name);
+                _overlay?.ShowRecording(RECORDING_OVERLAY_ID, name);
             });
         }
 
@@ -263,14 +255,13 @@ namespace MacroKeyboard
         {
             Dispatcher.Invoke(() =>
             {
-                SetStatus("就绪", false);
+                SetStatus(_player.IsPlaying ? $"回放中... ({_player.ActiveCount} 个宏)" : "就绪", _player.IsPlaying);
                 RecordButton.Content = "⏺ 开始录制 (F9)";
                 RecordButton.Style = (Style)FindResource("DangerButton");
                 PlayButton.IsEnabled = true;
                 UpdateEventList();
 
-                // 隐藏浮动提示
-                _overlay?.HideOverlay();
+                _overlay?.RemoveEntry(RECORDING_OVERLAY_ID);
             });
         }
 
@@ -283,7 +274,7 @@ namespace MacroKeyboard
                 EventList.ScrollIntoView(text);
                 EventCountText.Text = $"录制中... ({EventList.Items.Count} 个事件)";
 
-                _overlay?.UpdateRecordingCount(EventList.Items.Count);
+                _overlay?.UpdateRecordingCount(RECORDING_OVERLAY_ID, EventList.Items.Count);
             });
         }
 
@@ -294,46 +285,66 @@ namespace MacroKeyboard
         private void HandlePlayback()
         {
             if (_selectedMacro == null || _selectedMacro.Events.Count == 0) return;
-            if (_recorder.IsRecording || _player.IsPlaying) return;
+            if (_recorder.IsRecording) return;
+            if (_player.IsMacroPlaying(_selectedMacro.Id)) return;
 
             _ = _player.PlayAsync(_selectedMacro);
         }
 
-        private void OnPlaybackStarted()
+        private void OnPlaybackStarted(string macroId)
         {
             Dispatcher.Invoke(() =>
             {
-                SetStatus("回放中...", true);
-                PlayButton.Visibility = Visibility.Collapsed;
-                RecordButton.IsEnabled = false;
-                StopButton.Visibility = Visibility.Visible;
+                var macro = _macros.FirstOrDefault(m => m.Id == macroId);
+                var name = macro?.Name ?? "宏";
 
-                // 显示浮动提示
-                var name = _selectedMacro?.Name ?? "宏";
-                _overlay?.ShowPlayback(name);
+                SetStatus($"回放中... ({_player.ActiveCount} 个宏)", true);
+
+                // 如果是当前选中的宏，更新按钮状态
+                if (_selectedMacro?.Id == macroId)
+                {
+                    PlayButton.Visibility = Visibility.Collapsed;
+                    RecordButton.IsEnabled = false;
+                    StopButton.Visibility = Visibility.Visible;
+                }
+
+                _overlay?.ShowPlayback(macroId, name);
             });
         }
 
-        private void OnPlaybackStopped()
+        private void OnPlaybackStopped(string macroId)
         {
             Dispatcher.Invoke(() =>
             {
-                SetStatus("就绪", false);
-                PlayButton.Visibility = Visibility.Visible;
-                RecordButton.IsEnabled = true;
-                StopButton.Visibility = Visibility.Collapsed;
+                _overlay?.RemoveEntry(macroId);
 
-                // 隐藏浮动提示
-                _overlay?.HideOverlay();
+                if (_player.IsPlaying)
+                {
+                    SetStatus($"回放中... ({_player.ActiveCount} 个宏)", true);
+                }
+                else
+                {
+                    SetStatus("就绪", false);
+                }
+
+                // 如果是当前选中的宏，恢复按钮状态
+                if (_selectedMacro?.Id == macroId)
+                {
+                    PlayButton.Visibility = Visibility.Visible;
+                    RecordButton.IsEnabled = !_player.IsPlaying || true; // 录制不受其他宏回放影响
+                    StopButton.Visibility = Visibility.Collapsed;
+                }
             });
         }
 
-        private void OnPlaybackProgress(int current, int total)
+        private void OnPlaybackProgress(string macroId, int current, int total)
         {
             Dispatcher.Invoke(() =>
             {
-                StatusText.Text = $"回放中... {current}/{total}";
-                _overlay?.UpdateProgress(current, total);
+                if (_selectedMacro?.Id == macroId)
+                    StatusText.Text = $"回放中... {current}/{total} ({_player.ActiveCount} 个宏)";
+
+                _overlay?.UpdateProgress(macroId, current, total);
             });
         }
 
@@ -345,7 +356,6 @@ namespace MacroKeyboard
         {
             if (_selectedMacro == null) return;
 
-            // 检查冲突（F9/F10/Esc 保留）
             if (vkCode == VK_F9 || vkCode == VK_F10 || vkCode == VK_ESCAPE)
             {
                 MessageBox.Show("F9、F10、Esc 为系统保留键，不能作为触发键。", "提示",
@@ -353,7 +363,6 @@ namespace MacroKeyboard
                 return;
             }
 
-            // 检查是否与其他宏冲突
             var conflict = _macros.FirstOrDefault(m => m.Id != _selectedMacro.Id && m.TriggerVirtualKeyCode == vkCode);
             if (conflict != null)
             {
@@ -396,7 +405,6 @@ namespace MacroKeyboard
                 RepeatBox.Text = _selectedMacro.RepeatCount.ToString();
                 RecordMouseCheck.IsChecked = _selectedMacro.RecordMouseMovement;
 
-                // 设置速度下拉框
                 var speedTag = _selectedMacro.PlaybackSpeed.ToString();
                 foreach (ComboBoxItem item in SpeedCombo.Items)
                 {
@@ -405,6 +413,20 @@ namespace MacroKeyboard
                         SpeedCombo.SelectedItem = item;
                         break;
                     }
+                }
+
+                // 更新按钮状态 — 如果该宏正在回放
+                if (_player.IsMacroPlaying(_selectedMacro.Id))
+                {
+                    PlayButton.Visibility = Visibility.Collapsed;
+                    StopButton.Visibility = Visibility.Visible;
+                    RecordButton.IsEnabled = false;
+                }
+                else
+                {
+                    PlayButton.Visibility = Visibility.Visible;
+                    StopButton.Visibility = Visibility.Collapsed;
+                    RecordButton.IsEnabled = true;
                 }
 
                 UpdateEventList();
@@ -426,6 +448,10 @@ namespace MacroKeyboard
         private void DeleteMacro_Click(object sender, RoutedEventArgs e)
         {
             if (_selectedMacro == null) return;
+
+            // 如果正在回放，先停止
+            if (_player.IsMacroPlaying(_selectedMacro.Id))
+                _player.Stop(_selectedMacro.Id);
 
             var result = MessageBox.Show($"确定删除宏「{_selectedMacro.Name}」？", "确认删除",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
@@ -450,8 +476,8 @@ namespace MacroKeyboard
 
         private void StopButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_player.IsPlaying)
-                _player.Stop();
+            if (_selectedMacro != null && _player.IsMacroPlaying(_selectedMacro.Id))
+                _player.Stop(_selectedMacro.Id);
         }
 
         private void MacroNameBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -484,7 +510,6 @@ namespace MacroKeyboard
 
             if (double.TryParse(item.Tag?.ToString(), out double speed))
             {
-                // 0 表示"最快" → 设一个极大值
                 _selectedMacro.PlaybackSpeed = speed == 0 ? 10000 : speed;
                 _selectedMacro.UpdatedAt = DateTime.Now;
                 _storage.Save(_selectedMacro, _macros);

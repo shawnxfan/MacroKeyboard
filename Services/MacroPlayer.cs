@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -8,7 +9,7 @@ using MacroKeyboard.Models;
 namespace MacroKeyboard.Services
 {
     /// <summary>
-    /// 宏回放器：通过 SendInput 模拟键盘/鼠标事件
+    /// 宏回放器：支持多个宏同时并发回放，每个宏独立控制
     /// </summary>
     public class MacroPlayer
     {
@@ -76,21 +77,47 @@ namespace MacroKeyboard.Services
 
         #endregion
 
-        private CancellationTokenSource? _cts;
-        private bool _isPlaying;
+        /// <summary>
+        /// 跟踪每个正在回放的宏的 CancellationTokenSource
+        /// Key = MacroDefinition.Id
+        /// </summary>
+        private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeMacros = new();
 
-        public bool IsPlaying => _isPlaying;
-        public event Action? PlaybackStarted;
-        public event Action? PlaybackStopped;
-        public event Action<int, int>? PlaybackProgress; // (current, total)
+        /// <summary>任意宏正在回放</summary>
+        public bool IsPlaying => !_activeMacros.IsEmpty;
 
+        /// <summary>指定宏是否正在回放</summary>
+        public bool IsMacroPlaying(string macroId) => _activeMacros.ContainsKey(macroId);
+
+        /// <summary>当前正在回放的宏 ID 列表</summary>
+        public ICollection<string> ActiveMacroIds => _activeMacros.Keys;
+
+        /// <summary>当前活跃宏数量</summary>
+        public int ActiveCount => _activeMacros.Count;
+
+        // 事件：携带 macroId 以区分是哪个宏
+        public event Action<string>? PlaybackStarted;       // macroId
+        public event Action<string>? PlaybackStopped;       // macroId
+        public event Action<string, int, int>? PlaybackProgress; // macroId, current, total
+
+        /// <summary>
+        /// 启动指定宏的回放（不阻塞其他宏）
+        /// </summary>
         public async Task PlayAsync(MacroDefinition macro)
         {
-            if (_isPlaying || macro.Events.Count == 0) return;
+            if (macro.Events.Count == 0) return;
 
-            _isPlaying = true;
-            _cts = new CancellationTokenSource();
-            PlaybackStarted?.Invoke();
+            // 如果该宏已在回放，不重复启动
+            if (_activeMacros.ContainsKey(macro.Id)) return;
+
+            var cts = new CancellationTokenSource();
+            if (!_activeMacros.TryAdd(macro.Id, cts))
+            {
+                cts.Dispose();
+                return;
+            }
+
+            PlaybackStarted?.Invoke(macro.Id);
 
             try
             {
@@ -100,7 +127,7 @@ namespace MacroKeyboard.Services
                 {
                     for (int i = 0; i < macro.Events.Count; i++)
                     {
-                        _cts.Token.ThrowIfCancellationRequested();
+                        cts.Token.ThrowIfCancellationRequested();
 
                         var evt = macro.Events[i];
 
@@ -109,27 +136,35 @@ namespace MacroKeyboard.Services
                         {
                             int delay = (int)(evt.DelayMs / macro.PlaybackSpeed);
                             if (delay > 0)
-                                await Task.Delay(delay, _cts.Token);
+                                await Task.Delay(delay, cts.Token);
                         }
 
                         ExecuteEvent(evt);
-                        PlaybackProgress?.Invoke(i + 1, macro.Events.Count);
+                        PlaybackProgress?.Invoke(macro.Id, i + 1, macro.Events.Count);
                     }
                 }
             }
             catch (OperationCanceledException) { }
             finally
             {
-                _isPlaying = false;
-                _cts?.Dispose();
-                _cts = null;
-                PlaybackStopped?.Invoke();
+                _activeMacros.TryRemove(macro.Id, out _);
+                cts.Dispose();
+                PlaybackStopped?.Invoke(macro.Id);
             }
         }
 
-        public void Stop()
+        /// <summary>停止指定宏的回放</summary>
+        public void Stop(string macroId)
         {
-            _cts?.Cancel();
+            if (_activeMacros.TryGetValue(macroId, out var cts))
+                cts.Cancel();
+        }
+
+        /// <summary>停止所有正在回放的宏</summary>
+        public void StopAll()
+        {
+            foreach (var kvp in _activeMacros)
+                kvp.Value.Cancel();
         }
 
         private void ExecuteEvent(MacroEvent evt)

@@ -9,22 +9,6 @@
 
     <Border x:Name="RootBorder" Background="#E6181825" CornerRadius="10"
             Padding="14,10" BorderBrush="#60FFFFFF" BorderThickness="1">
-        <StackPanel Orientation="Horizontal">
-            <!-- 状态指示灯 -->
-            <Ellipse x:Name="Indicator" Width="10" Height="10"
-                     Fill="#4CAF50" Margin="0,0,10,0" VerticalAlignment="Center"/>
-            <!-- 宏名称 -->
-            <TextBlock x:Name="MacroNameText" Text="宏名称"
-                       Foreground="#E0E0E0" FontSize="13" FontWeight="Medium"
-                       VerticalAlignment="Center" Margin="0,0,12,0"/>
-            <!-- 状态文本 -->
-            <TextBlock x:Name="StatusLabel" Text="回放中"
-                       Foreground="#FF9800" FontSize="12"
-                       VerticalAlignment="Center" Margin="0,0,8,0"/>
-            <!-- 进度 -->
-            <TextBlock x:Name="ProgressText" Text=""
-                       Foreground="#9090A0" FontSize="11"
-                       VerticalAlignment="Center"/>
-        </StackPanel>
+        <StackPanel x:Name="ItemsPanel" MinWidth="180"/>
     </Border>
 </Window>
