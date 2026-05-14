@@ -1,0 +1,287 @@
+<Window x:Class="MacroKeyboard.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:cvt="clr-namespace:MacroKeyboard.Converters"
+        Title="MacroKeyboard" Height="640" Width="860"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgBrush}"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI">
+
+    <Window.Resources>
+        <cvt:BoolToVisibilityConverter x:Key="BoolToVis"/>
+        <cvt:BoolToColorConverter x:Key="BoolToColor"/>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 顶部标题栏 -->
+        <Border Grid.Row="0" Background="{StaticResource BgLightBrush}" Padding="20,14">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="⌨" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Text="MacroKeyboard" FontSize="18" FontWeight="Bold"
+                               Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                    <Border Background="{StaticResource PrimaryBrush}" CornerRadius="3"
+                            Padding="6,2" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="v1.0" FontSize="10" Foreground="White"/>
+                    </Border>
+                </StackPanel>
+
+                <!-- 状态指示 -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse x:Name="StatusDot" Width="10" Height="10" Margin="0,0,8,0">
+                        <Ellipse.Fill>
+                            <SolidColorBrush Color="{StaticResource SuccessColor}"/>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <TextBlock x:Name="StatusText" Text="就绪" FontSize="13"
+                               Foreground="{StaticResource TextDimBrush}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 主内容区 -->
+        <Grid Grid.Row="1" Margin="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 左侧：宏列表 -->
+            <Border Grid.Column="0" Background="{StaticResource BgCardBrush}"
+                    CornerRadius="8" Margin="0,0,8,0" Padding="12">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="宏列表" FontSize="14" FontWeight="SemiBold" Margin="4,0,0,10"
+                               Foreground="{StaticResource TextBrush}"/>
+
+                    <ListBox x:Name="MacroList" Grid.Row="1"
+                             Background="Transparent" BorderThickness="0"
+                             Foreground="{StaticResource TextBrush}"
+                             SelectionChanged="MacroList_SelectionChanged"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="10,8"/>
+                                <Setter Property="Margin" Value="0,2"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Bd" Background="Transparent"
+                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background"
+                                                            Value="{StaticResource PrimaryDarkBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bd" Property="Background"
+                                                            Value="{StaticResource BgLightBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Medium"
+                                               Foreground="{StaticResource TextBrush}"/>
+                                    <TextBlock Text="{Binding DisplayInfo}" FontSize="11"
+                                               Foreground="{StaticResource TextDimBrush}" Margin="0,3,0,0"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- 底部操作按钮 -->
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button Content="＋ 新建" Style="{StaticResource ModernButton}"
+                                Click="NewMacro_Click" Padding="12,6" FontSize="12"/>
+                        <Button x:Name="DeleteButton" Content="删除" Style="{StaticResource DangerButton}"
+                                Click="DeleteMacro_Click" Padding="12,6" FontSize="12" Margin="8,0,0,0"
+                                IsEnabled="False"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 右侧：详情/操作区 -->
+            <Border Grid.Column="1" Background="{StaticResource BgCardBrush}"
+                    CornerRadius="8" Margin="8,0,0,0" Padding="20">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- 未选择状态 -->
+                    <TextBlock x:Name="PlaceholderText" Grid.RowSpan="4"
+                               Text="← 选择或新建一个宏开始"
+                               FontSize="15" Foreground="{StaticResource TextDimBrush}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                    <!-- 宏编辑区 -->
+                    <StackPanel x:Name="EditPanel" Grid.Row="0" Visibility="Collapsed">
+                        <!-- 名称 -->
+                        <TextBlock Text="宏名称" FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
+                        <TextBox x:Name="MacroNameBox" FontSize="14" Padding="8,6"
+                                 Background="{StaticResource BgLightBrush}" Foreground="{StaticResource TextBrush}"
+                                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                 TextChanged="MacroNameBox_TextChanged">
+                            <TextBox.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="4"/>
+                                </Style>
+                            </TextBox.Resources>
+                        </TextBox>
+
+                        <!-- 触发键 -->
+                        <TextBlock Text="触发快捷键（点击下方框后按下目标按键）" FontSize="12"
+                                   Foreground="{StaticResource TextDimBrush}" Margin="0,14,0,4"/>
+                        <TextBox x:Name="TriggerKeyBox" FontSize="14" Padding="8,6" IsReadOnly="True"
+                                 Background="{StaticResource BgLightBrush}" Foreground="{StaticResource AccentBrush}"
+                                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                 GotFocus="TriggerKeyBox_GotFocus" LostFocus="TriggerKeyBox_LostFocus"
+                                 FontWeight="Bold" Cursor="Hand">
+                            <TextBox.Resources>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="4"/>
+                                </Style>
+                            </TextBox.Resources>
+                        </TextBox>
+
+                        <!-- 设置行 -->
+                        <Grid Margin="0,14,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock Text="回放速度" FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
+                                <ComboBox x:Name="SpeedCombo" FontSize="12" Padding="6,4"
+                                          Background="{StaticResource BgLightBrush}" Foreground="{StaticResource TextBrush}"
+                                          SelectionChanged="SpeedCombo_SelectionChanged">
+                                    <ComboBoxItem Content="0.25x" Tag="0.25"/>
+                                    <ComboBoxItem Content="0.5x" Tag="0.5"/>
+                                    <ComboBoxItem Content="1x（原速）" Tag="1" IsSelected="True"/>
+                                    <ComboBoxItem Content="2x" Tag="2"/>
+                                    <ComboBoxItem Content="4x" Tag="4"/>
+                                    <ComboBoxItem Content="最快（无延迟）" Tag="0"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                <TextBlock Text="重复次数" FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
+                                <TextBox x:Name="RepeatBox" Text="1" FontSize="12" Padding="6,4"
+                                         Background="{StaticResource BgLightBrush}" Foreground="{StaticResource TextBrush}"
+                                         BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                         TextChanged="RepeatBox_TextChanged">
+                                    <TextBox.Resources>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="4"/>
+                                        </Style>
+                                    </TextBox.Resources>
+                                </TextBox>
+                                <TextBlock Text="0 = 无限循环" FontSize="10" Foreground="{StaticResource TextDimBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="2" Margin="8,0,0,0">
+                                <TextBlock Text="录制鼠标" FontSize="12" Foreground="{StaticResource TextDimBrush}" Margin="0,0,0,4"/>
+                                <CheckBox x:Name="RecordMouseCheck" Content="包含鼠标事件"
+                                          Foreground="{StaticResource TextBrush}" FontSize="12"
+                                          VerticalAlignment="Center" Margin="0,4,0,0"
+                                          Checked="RecordMouseCheck_Changed" Unchecked="RecordMouseCheck_Changed"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- 事件列表 -->
+                    <Border x:Name="EventListPanel" Grid.Row="2" Visibility="Collapsed"
+                            Margin="0,14,0,0" Background="{StaticResource BgLightBrush}"
+                            CornerRadius="6" Padding="0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <Border Grid.Row="0" Background="{StaticResource BgBrush}"
+                                    CornerRadius="6,6,0,0" Padding="12,8">
+                                <Grid>
+                                    <TextBlock x:Name="EventCountText" Text="事件列表（0 个事件）"
+                                               FontSize="12" Foreground="{StaticResource TextDimBrush}"/>
+                                    <TextBlock x:Name="DurationText" Text=""
+                                               FontSize="12" Foreground="{StaticResource TextDimBrush}"
+                                               HorizontalAlignment="Right"/>
+                                </Grid>
+                            </Border>
+
+                            <ListBox x:Name="EventList" Grid.Row="1"
+                                     Background="Transparent" BorderThickness="0"
+                                     Foreground="{StaticResource TextBrush}" FontSize="12"
+                                     FontFamily="Cascadia Code,Consolas"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Padding" Value="12,4"/>
+                                        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+
+                    <!-- 底部操作栏 -->
+                    <StackPanel x:Name="ActionPanel" Grid.Row="3" Visibility="Collapsed"
+                                Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button x:Name="RecordButton" Content="⏺ 开始录制 (F9)"
+                                Style="{StaticResource DangerButton}"
+                                Click="RecordButton_Click" Padding="16,8"/>
+                        <Button x:Name="PlayButton" Content="▶ 回放 (F10)"
+                                Style="{StaticResource SuccessButton}"
+                                Click="PlayButton_Click" Padding="16,8" Margin="10,0,0,0"/>
+                        <Button x:Name="StopButton" Content="⏹ 停止"
+                                Style="{StaticResource AccentButton}"
+                                Click="StopButton_Click" Padding="16,8" Margin="10,0,0,0"
+                                Visibility="Collapsed"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 底部状态栏 -->
+        <Border Grid.Row="2" Background="{StaticResource BgLightBrush}" Padding="16,8">
+            <Grid>
+                <TextBlock x:Name="FooterText"
+                           Text="F9 录制/停止 | F10 回放 | Esc 紧急停止 | 触发键绑定后全局有效"
+                           FontSize="11" Foreground="{StaticResource TextDimBrush}"/>
+                <TextBlock x:Name="FooterRight" HorizontalAlignment="Right"
+                           FontSize="11" Foreground="{StaticResource TextDimBrush}"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>
