@@ -129,9 +129,18 @@ namespace MacroKeyboard
             if (vkCode == VK_F9 || vkCode == VK_F10 || vkCode == VK_ESCAPE)
                 return false;
 
-            // 回放触发键时，拦截以避免重复触发
-            if (_player.IsPlaying && _selectedMacro != null && vkCode == _selectedMacro.TriggerVirtualKeyCode)
-                return true;
+            // 回放中按触发键：拦截（防止传给其他应用）但不丢弃事件
+            // OnGlobalKeyEvent 会在 ShouldSuppressKey 之前被调用，所以这里只管拦截
+            // 注意：这里需要让所有已绑定的触发键在回放时都被拦截（防止传给前台应用）
+            if (_player.IsPlaying)
+            {
+                // 拦截当前正在回放的宏的触发键
+                if (_selectedMacro != null && vkCode == _selectedMacro.TriggerVirtualKeyCode)
+                    return true;
+                // 也拦截其他宏的触发键（防止回放中意外触发其他宏）
+                if (_macros.Any(m => m.IsEnabled && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0))
+                    return true;
+            }
 
             return false;
         }
@@ -182,13 +191,22 @@ namespace MacroKeyboard
                 }
 
                 // 检查是否匹配某个宏的触发键
-                if (!_recorder.IsRecording && !_player.IsPlaying)
+                if (!_recorder.IsRecording)
                 {
                     var macro = _macros.FirstOrDefault(m => m.IsEnabled && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0);
                     if (macro != null)
                     {
-                        _selectedMacro = macro;
-                        _ = _player.PlayAsync(macro);
+                        if (_player.IsPlaying)
+                        {
+                            // 回放中按任意宏触发键 → 停止回放
+                            _player.Stop();
+                        }
+                        else
+                        {
+                            // 未回放 → 启动对应宏
+                            _selectedMacro = macro;
+                            _ = _player.PlayAsync(macro);
+                        }
                     }
                 }
             });

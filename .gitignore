@@ -12,3 +12,8 @@ obj/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+## Publish artifacts
+publish/
+publish-lite/
+*.zip

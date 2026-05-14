@@ -138,11 +138,12 @@ namespace MacroKeyboard.Services
 
                 if (isDown || isUp)
                 {
-                    // 检查是否需要拦截
+                    // 先触发 KeyEvent，让主逻辑有机会处理（如停止回放）
+                    KeyEvent?.Invoke((int)info.vkCode, isDown);
+
+                    // 再检查是否需要拦截（防止事件传给其他应用）
                     if (ShouldSuppressKey?.Invoke((int)info.vkCode, isDown) == true)
                         return new IntPtr(1); // 吞掉事件
-
-                    KeyEvent?.Invoke((int)info.vkCode, isDown);
                 }
             }
             return CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
