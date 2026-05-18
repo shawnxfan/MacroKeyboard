@@ -16,6 +16,13 @@ namespace MacroKeyboard.Models
         Delay
     }
 
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum TriggerType
+    {
+        Keyboard,
+        Mouse
+    }
+
     public class MacroEvent
     {
         public MacroEventType Type { get; set; }
@@ -40,6 +47,8 @@ namespace MacroKeyboard.Models
         public string Name { get; set; } = "未命名宏";
         public string TriggerKey { get; set; } = "";
         public int TriggerVirtualKeyCode { get; set; }
+        public TriggerType TriggerType { get; set; } = TriggerType.Keyboard;
+        public int TriggerMouseButton { get; set; } = -1; // -1=未设置, 0=左键, 1=右键, 2=中键, 3=侧键后(X1), 4=侧键前(X2)
         public List<MacroEvent> Events { get; set; } = new();
         public DateTime CreatedAt { get; set; } = DateTime.Now;
         public DateTime UpdatedAt { get; set; } = DateTime.Now;

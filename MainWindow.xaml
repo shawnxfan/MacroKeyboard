@@ -34,7 +34,7 @@
                                Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
                     <Border Background="{StaticResource PrimaryBrush}" CornerRadius="3"
                             Padding="6,2" Margin="12,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="v1.0" FontSize="10" Foreground="White"/>
+                        <TextBlock Text="v1.2" FontSize="10" Foreground="White"/>
                     </Border>
                 </StackPanel>
 
@@ -158,7 +158,7 @@
                         </TextBox>
 
                         <!-- 触发键 -->
-                        <TextBlock Text="触发快捷键（点击下方框后按下目标按键）" FontSize="12"
+                        <TextBlock Text="触发快捷键（点击下方框后按下目标按键或鼠标按键）" FontSize="12"
                                    Foreground="{StaticResource TextDimBrush}" Margin="0,14,0,4"/>
                         <TextBox x:Name="TriggerKeyBox" FontSize="14" Padding="8,6" IsReadOnly="True"
                                  Background="{StaticResource BgLightBrush}" Foreground="{StaticResource AccentBrush}"
@@ -227,6 +227,7 @@
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
 
                             <Border Grid.Row="0" Background="{StaticResource BgBrush}"
@@ -244,7 +245,8 @@
                                      Background="Transparent" BorderThickness="0"
                                      Foreground="{StaticResource TextBrush}" FontSize="12"
                                      FontFamily="Cascadia Code,Consolas"
-                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     MouseDoubleClick="EventList_MouseDoubleClick">
                                 <ListBox.ItemContainerStyle>
                                     <Style TargetType="ListBoxItem">
                                         <Setter Property="Padding" Value="12,4"/>
@@ -252,6 +254,37 @@
                                     </Style>
                                 </ListBox.ItemContainerStyle>
                             </ListBox>
+
+                            <!-- 事件编辑工具栏 -->
+                            <Border Grid.Row="2" Background="{StaticResource BgBrush}"
+                                    CornerRadius="0,0,6,6" Padding="8,6">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="+ 按键" FontSize="11" Padding="8,4"
+                                            Background="{StaticResource PrimaryBrush}" Foreground="White"
+                                            BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"
+                                            Click="AddKeyEvent_Click"/>
+                                    <Button Content="+ 延迟" FontSize="11" Padding="8,4"
+                                            Background="{StaticResource AccentBrush}" Foreground="White"
+                                            BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"
+                                            Click="AddDelayEvent_Click"/>
+                                    <Button Content="编辑" FontSize="11" Padding="8,4"
+                                            Background="#3A3A4C" Foreground="#E0E0E0"
+                                            BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"
+                                            Click="EditEvent_Click"/>
+                                    <Button Content="删除" FontSize="11" Padding="8,4"
+                                            Background="#6B3A3A" Foreground="#E0E0E0"
+                                            BorderThickness="0" Cursor="Hand" Margin="0,0,4,0"
+                                            Click="DeleteEvent_Click"/>
+                                    <Button Content="▲" FontSize="11" Padding="8,4"
+                                            Background="#3A3A4C" Foreground="#E0E0E0"
+                                            BorderThickness="0" Cursor="Hand" Margin="4,0,2,0"
+                                            Click="MoveEventUp_Click" ToolTip="上移"/>
+                                    <Button Content="▼" FontSize="11" Padding="8,4"
+                                            Background="#3A3A4C" Foreground="#E0E0E0"
+                                            BorderThickness="0" Cursor="Hand" Margin="0,0,0,0"
+                                            Click="MoveEventDown_Click" ToolTip="下移"/>
+                                </StackPanel>
+                            </Border>
                         </Grid>
                     </Border>
 

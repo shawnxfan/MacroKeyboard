@@ -65,6 +65,11 @@ namespace MacroKeyboard
             _hookManager.ShouldSuppressKey = ShouldSuppressKey;
             _hookManager.InstallKeyboardHook();
 
+            // 全局鼠标钩子（用于鼠标触发键）
+            _hookManager.MouseButtonEvent += OnGlobalMouseButtonEvent;
+            _hookManager.ShouldSuppressMouseButton = ShouldSuppressMouseButton;
+            _hookManager.InstallMouseHook();
+
             UpdateFooter();
             Closed += (_, _) =>
             {
@@ -132,7 +137,7 @@ namespace MacroKeyboard
             // 如果有任何宏在回放，拦截所有已绑定的触发键（防止传给前台应用）
             if (_player.IsPlaying)
             {
-                if (_macros.Any(m => m.IsEnabled && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0))
+                if (_macros.Any(m => m.IsEnabled && m.TriggerType == Models.TriggerType.Keyboard && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0))
                     return true;
             }
 
@@ -187,7 +192,7 @@ namespace MacroKeyboard
                 // 检查是否匹配某个宏的触发键
                 if (!_recorder.IsRecording)
                 {
-                    var macro = _macros.FirstOrDefault(m => m.IsEnabled && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0);
+                    var macro = _macros.FirstOrDefault(m => m.IsEnabled && m.TriggerType == Models.TriggerType.Keyboard && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0);
                     if (macro != null)
                     {
                         if (_player.IsMacroPlaying(macro.Id))
@@ -198,6 +203,50 @@ namespace MacroKeyboard
                         else
                         {
                             // 该宏未在回放 → 启动它（不影响其他正在回放的宏）
+                            _ = _player.PlayAsync(macro);
+                        }
+                    }
+                }
+            });
+        }
+
+        private bool ShouldSuppressMouseButton(int button, bool isDown)
+        {
+            // 如果有任何宏在回放，拦截所有绑定为鼠标触发键的按钮
+            if (_player.IsPlaying)
+            {
+                if (_macros.Any(m => m.IsEnabled && m.TriggerType == Models.TriggerType.Mouse && m.TriggerMouseButton == button))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private void OnGlobalMouseButtonEvent(int x, int y, int button, bool isDown)
+        {
+            if (!isDown) return;
+
+            Dispatcher.Invoke(() =>
+            {
+                // 正在绑定触发键 — 鼠标按键也可以作为触发键
+                if (_isBindingTriggerKey && _selectedMacro != null)
+                {
+                    BindTriggerMouseButton(button);
+                    return;
+                }
+
+                // 检查是否匹配某个宏的鼠标触发键
+                if (!_recorder.IsRecording)
+                {
+                    var macro = _macros.FirstOrDefault(m => m.IsEnabled && m.TriggerType == Models.TriggerType.Mouse && m.TriggerMouseButton == button);
+                    if (macro != null)
+                    {
+                        if (_player.IsMacroPlaying(macro.Id))
+                        {
+                            _player.Stop(macro.Id);
+                        }
+                        else
+                        {
                             _ = _player.PlayAsync(macro);
                         }
                     }
@@ -363,7 +412,7 @@ namespace MacroKeyboard
                 return;
             }
 
-            var conflict = _macros.FirstOrDefault(m => m.Id != _selectedMacro.Id && m.TriggerVirtualKeyCode == vkCode);
+            var conflict = _macros.FirstOrDefault(m => m.Id != _selectedMacro.Id && m.TriggerType == Models.TriggerType.Keyboard && m.TriggerVirtualKeyCode == vkCode);
             if (conflict != null)
             {
                 MessageBox.Show($"此按键已绑定给宏「{conflict.Name}」，请选择其他按键。", "冲突",
@@ -374,6 +423,8 @@ namespace MacroKeyboard
             var keyName = KeyInterop.KeyFromVirtualKey(vkCode).ToString();
             _selectedMacro.TriggerKey = keyName;
             _selectedMacro.TriggerVirtualKeyCode = vkCode;
+            _selectedMacro.TriggerType = Models.TriggerType.Keyboard;
+            _selectedMacro.TriggerMouseButton = -1;
             _selectedMacro.UpdatedAt = DateTime.Now;
             _storage.Save(_selectedMacro, _macros);
 
@@ -382,6 +433,50 @@ namespace MacroKeyboard
             TriggerKeyBox.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x3C));
             RefreshMacroList();
         }
+
+        private void BindTriggerMouseButton(int button)
+        {
+            if (_selectedMacro == null) return;
+
+            // 左键不允许作为触发键（太容易误触）
+            if (button == 0)
+            {
+                MessageBox.Show("鼠标左键不能作为触发键（容易误触）。\n建议使用侧键或中键。", "提示",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var conflict = _macros.FirstOrDefault(m => m.Id != _selectedMacro.Id && m.TriggerType == Models.TriggerType.Mouse && m.TriggerMouseButton == button);
+            if (conflict != null)
+            {
+                MessageBox.Show($"此鼠标按键已绑定给宏「{conflict.Name}」，请选择其他按键。", "冲突",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var buttonName = MouseButtonDisplayName(button);
+            _selectedMacro.TriggerKey = buttonName;
+            _selectedMacro.TriggerVirtualKeyCode = 0;
+            _selectedMacro.TriggerType = Models.TriggerType.Mouse;
+            _selectedMacro.TriggerMouseButton = button;
+            _selectedMacro.UpdatedAt = DateTime.Now;
+            _storage.Save(_selectedMacro, _macros);
+
+            TriggerKeyBox.Text = buttonName;
+            _isBindingTriggerKey = false;
+            TriggerKeyBox.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x3C));
+            RefreshMacroList();
+        }
+
+        private static string MouseButtonDisplayName(int button) => button switch
+        {
+            0 => "🖱 左键",
+            1 => "🖱 右键",
+            2 => "🖱 中键",
+            3 => "🖱 侧键后(X1)",
+            4 => "🖱 侧键前(X2)",
+            _ => $"🖱 按钮{button}"
+        };
 
         #endregion
 
@@ -533,6 +628,146 @@ namespace MacroKeyboard
             _selectedMacro.RecordMouseMovement = RecordMouseCheck.IsChecked == true;
             _selectedMacro.UpdatedAt = DateTime.Now;
             _storage.Save(_selectedMacro, _macros);
+        }
+
+        #endregion
+
+        #region 事件编辑
+
+        private void AddKeyEvent_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMacro == null) return;
+
+            var dialog = new EventEditDialog();
+            dialog.Owner = this;
+            if (dialog.ShowDialog() == true && dialog.ResultEvent != null)
+            {
+                int insertIndex = EventList.SelectedIndex >= 0 ? EventList.SelectedIndex + 1 : _selectedMacro.Events.Count;
+
+                if (dialog.InsertKeyPress)
+                {
+                    // "按下+释放" 插入两个事件
+                    var downEvt = dialog.ResultEvent;
+                    var upEvt = new MacroEvent
+                    {
+                        Type = MacroEventType.KeyUp,
+                        VirtualKeyCode = downEvt.VirtualKeyCode,
+                        KeyName = downEvt.KeyName,
+                        DelayMs = 30 // 默认 30ms 间隔
+                    };
+                    _selectedMacro.Events.Insert(insertIndex, downEvt);
+                    _selectedMacro.Events.Insert(insertIndex + 1, upEvt);
+                }
+                else
+                {
+                    _selectedMacro.Events.Insert(insertIndex, dialog.ResultEvent);
+                }
+
+                SaveAndRefreshEvents();
+            }
+        }
+
+        private void AddDelayEvent_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMacro == null) return;
+
+            // 快捷添加延迟 — 直接弹输入框
+            var dialog = new EventEditDialog();
+            dialog.Owner = this;
+            // 预选"延迟"类型
+            dialog.Loaded += (_, _) =>
+            {
+                var combo = dialog.FindName("EventTypeCombo") as System.Windows.Controls.ComboBox;
+                if (combo != null) combo.SelectedIndex = 3;
+            };
+
+            if (dialog.ShowDialog() == true && dialog.ResultEvent != null)
+            {
+                int insertIndex = EventList.SelectedIndex >= 0 ? EventList.SelectedIndex + 1 : _selectedMacro.Events.Count;
+                _selectedMacro.Events.Insert(insertIndex, dialog.ResultEvent);
+                SaveAndRefreshEvents();
+            }
+        }
+
+        private void EditEvent_Click(object sender, RoutedEventArgs e)
+        {
+            EditSelectedEvent();
+        }
+
+        private void EventList_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            EditSelectedEvent();
+        }
+
+        private void EditSelectedEvent()
+        {
+            if (_selectedMacro == null || EventList.SelectedIndex < 0) return;
+
+            int index = EventList.SelectedIndex;
+            if (index >= _selectedMacro.Events.Count) return;
+
+            var existingEvent = _selectedMacro.Events[index];
+            var dialog = new EventEditDialog(existingEvent);
+            dialog.Owner = this;
+
+            if (dialog.ShowDialog() == true && dialog.ResultEvent != null)
+            {
+                _selectedMacro.Events[index] = dialog.ResultEvent;
+                SaveAndRefreshEvents();
+                // 保持选中
+                if (index < EventList.Items.Count)
+                    EventList.SelectedIndex = index;
+            }
+        }
+
+        private void DeleteEvent_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMacro == null || EventList.SelectedIndex < 0) return;
+
+            int index = EventList.SelectedIndex;
+            if (index >= _selectedMacro.Events.Count) return;
+
+            _selectedMacro.Events.RemoveAt(index);
+            SaveAndRefreshEvents();
+
+            // 选中相邻项
+            if (_selectedMacro.Events.Count > 0)
+                EventList.SelectedIndex = Math.Min(index, _selectedMacro.Events.Count - 1);
+        }
+
+        private void MoveEventUp_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMacro == null || EventList.SelectedIndex <= 0) return;
+
+            int index = EventList.SelectedIndex;
+            var evt = _selectedMacro.Events[index];
+            _selectedMacro.Events.RemoveAt(index);
+            _selectedMacro.Events.Insert(index - 1, evt);
+            SaveAndRefreshEvents();
+            EventList.SelectedIndex = index - 1;
+        }
+
+        private void MoveEventDown_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMacro == null || EventList.SelectedIndex < 0) return;
+
+            int index = EventList.SelectedIndex;
+            if (index >= _selectedMacro.Events.Count - 1) return;
+
+            var evt = _selectedMacro.Events[index];
+            _selectedMacro.Events.RemoveAt(index);
+            _selectedMacro.Events.Insert(index + 1, evt);
+            SaveAndRefreshEvents();
+            EventList.SelectedIndex = index + 1;
+        }
+
+        private void SaveAndRefreshEvents()
+        {
+            if (_selectedMacro == null) return;
+            _selectedMacro.UpdatedAt = DateTime.Now;
+            _storage.Save(_selectedMacro, _macros);
+            UpdateEventList();
+            RefreshMacroList();
         }
 
         #endregion

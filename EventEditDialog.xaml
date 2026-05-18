@@ -1,0 +1,82 @@
+<Window x:Class="MacroKeyboard.EventEditDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="编辑事件" Height="380" Width="400"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#1E1E2E" Foreground="#E0E0E0"
+        FontFamily="Segoe UI">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 事件类型 Label -->
+        <TextBlock Grid.Row="0" Text="事件类型" FontSize="12" Foreground="#A0A0B0" Margin="0,0,0,4"/>
+        <!-- 事件类型 ComboBox -->
+        <ComboBox x:Name="EventTypeCombo" Grid.Row="1" FontSize="13" Padding="8,6"
+                  Background="#2A2A3C" Foreground="#E0E0E0"
+                  SelectionChanged="EventTypeCombo_SelectionChanged">
+            <ComboBoxItem Content="按下按键 (KeyDown)" Tag="KeyDown" IsSelected="True"/>
+            <ComboBoxItem Content="释放按键 (KeyUp)" Tag="KeyUp"/>
+            <ComboBoxItem Content="按下+释放 (按键完整)" Tag="KeyPress"/>
+            <ComboBoxItem Content="延迟 (Delay)" Tag="Delay"/>
+        </ComboBox>
+
+        <!-- 按键选择 Label -->
+        <TextBlock Grid.Row="2" Text="按键（点击下方框后按下目标按键）" FontSize="12"
+                   Foreground="#A0A0B0" Margin="0,14,0,4"/>
+        <!-- 按键选择 Input -->
+        <TextBox x:Name="KeyInputBox" Grid.Row="3" FontSize="14" Padding="8,6"
+                 IsReadOnly="True" Cursor="Hand"
+                 Background="#2A2A3C" Foreground="#7B9FFF" FontWeight="Bold"
+                 BorderBrush="#3A3A4C" BorderThickness="1"
+                 GotFocus="KeyInputBox_GotFocus" LostFocus="KeyInputBox_LostFocus"
+                 PreviewKeyDown="KeyInputBox_PreviewKeyDown"
+                 Text="点击此处后按下按键...">
+            <TextBox.Resources>
+                <Style TargetType="Border">
+                    <Setter Property="CornerRadius" Value="4"/>
+                </Style>
+            </TextBox.Resources>
+        </TextBox>
+
+        <!-- 延迟时间 Label -->
+        <TextBlock Grid.Row="4" x:Name="DelayLabel" Text="前置延迟 (毫秒)" FontSize="12"
+                   Foreground="#A0A0B0" Margin="0,14,0,4"/>
+        <!-- 延迟时间 Input -->
+        <TextBox x:Name="DelayInputBox" Grid.Row="5" FontSize="14" Padding="8,6"
+                 Background="#2A2A3C" Foreground="#E0E0E0"
+                 BorderBrush="#3A3A4C" BorderThickness="1"
+                 Text="0">
+            <TextBox.Resources>
+                <Style TargetType="Border">
+                    <Setter Property="CornerRadius" Value="4"/>
+                </Style>
+            </TextBox.Resources>
+        </TextBox>
+        <!-- 延迟说明 -->
+        <TextBlock Grid.Row="6" Text="该事件执行前等待的毫秒数" FontSize="10"
+                   Foreground="#707080" Margin="0,4,0,0"/>
+
+        <!-- 按钮 -->
+        <StackPanel Grid.Row="9" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="取消" Padding="16,8" FontSize="12" Margin="0,0,10,0"
+                    Background="#3A3A4C" Foreground="#E0E0E0" BorderThickness="0"
+                    Click="Cancel_Click" Cursor="Hand"/>
+            <Button Content="确定" Padding="16,8" FontSize="12"
+                    Background="#5B8DEF" Foreground="White" BorderThickness="0"
+                    Click="OK_Click" Cursor="Hand"/>
+        </StackPanel>
+    </Grid>
+</Window>

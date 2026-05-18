@@ -42,6 +42,8 @@ namespace MacroKeyboard.Services
         private const int WM_MBUTTONUP = 0x0208;
         private const int WM_MOUSEWHEEL = 0x020A;
         private const int WM_MOUSEMOVE = 0x0200;
+        private const int WM_XBUTTONDOWN = 0x020B;
+        private const int WM_XBUTTONUP = 0x020C;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct KBDLLHOOKSTRUCT
@@ -85,6 +87,8 @@ namespace MacroKeyboard.Services
 
         // 是否拦截（吞掉）回放触发键
         public Func<int, bool, bool>? ShouldSuppressKey { get; set; }
+        // 是否拦截鼠标按键（用于鼠标触发键）
+        public Func<int, bool, bool>? ShouldSuppressMouseButton { get; set; }
 
         public void InstallKeyboardHook()
         {
@@ -164,21 +168,49 @@ namespace MacroKeyboard.Services
                 {
                     case WM_LBUTTONDOWN:
                         MouseButtonEvent?.Invoke(info.x, info.y, 0, true);
+                        if (ShouldSuppressMouseButton?.Invoke(0, true) == true)
+                            return new IntPtr(1);
                         break;
                     case WM_LBUTTONUP:
                         MouseButtonEvent?.Invoke(info.x, info.y, 0, false);
+                        if (ShouldSuppressMouseButton?.Invoke(0, false) == true)
+                            return new IntPtr(1);
                         break;
                     case WM_RBUTTONDOWN:
                         MouseButtonEvent?.Invoke(info.x, info.y, 1, true);
+                        if (ShouldSuppressMouseButton?.Invoke(1, true) == true)
+                            return new IntPtr(1);
                         break;
                     case WM_RBUTTONUP:
                         MouseButtonEvent?.Invoke(info.x, info.y, 1, false);
+                        if (ShouldSuppressMouseButton?.Invoke(1, false) == true)
+                            return new IntPtr(1);
                         break;
                     case WM_MBUTTONDOWN:
                         MouseButtonEvent?.Invoke(info.x, info.y, 2, true);
+                        if (ShouldSuppressMouseButton?.Invoke(2, true) == true)
+                            return new IntPtr(1);
                         break;
                     case WM_MBUTTONUP:
                         MouseButtonEvent?.Invoke(info.x, info.y, 2, false);
+                        if (ShouldSuppressMouseButton?.Invoke(2, false) == true)
+                            return new IntPtr(1);
+                        break;
+                    case WM_XBUTTONDOWN:
+                        {
+                            int xButton = ((int)(info.mouseData >> 16) & 0xFFFF) == 1 ? 3 : 4; // 3=XButton1(侧键后), 4=XButton2(侧键前)
+                            MouseButtonEvent?.Invoke(info.x, info.y, xButton, true);
+                            if (ShouldSuppressMouseButton?.Invoke(xButton, true) == true)
+                                return new IntPtr(1);
+                        }
+                        break;
+                    case WM_XBUTTONUP:
+                        {
+                            int xButton = ((int)(info.mouseData >> 16) & 0xFFFF) == 1 ? 3 : 4;
+                            MouseButtonEvent?.Invoke(info.x, info.y, xButton, false);
+                            if (ShouldSuppressMouseButton?.Invoke(xButton, false) == true)
+                                return new IntPtr(1);
+                        }
                         break;
                     case WM_MOUSEWHEEL:
                         int delta = (short)((info.mouseData >> 16) & 0xFFFF);
