@@ -31,6 +31,9 @@ namespace MacroKeyboard
         // 触发键绑定状态
         private bool _isBindingTriggerKey;
 
+        // 宏触发全局开关
+        private bool _isMacroTriggerEnabled = true;
+
         // 全局快捷键 VK 码
         private const int VK_F9 = 0x78;
         private const int VK_F10 = 0x79;
@@ -100,6 +103,25 @@ namespace MacroKeyboard
             var contextMenu = new Forms.ContextMenuStrip();
             contextMenu.Items.Add("显示主窗口", null, (_, _) => ShowMainWindow());
             contextMenu.Items.Add("-");
+
+            var toggleTriggerItem = new Forms.ToolStripMenuItem("宏触发: 已启用");
+            toggleTriggerItem.Click += (_, _) =>
+            {
+                _isMacroTriggerEnabled = !_isMacroTriggerEnabled;
+                toggleTriggerItem.Text = _isMacroTriggerEnabled ? "宏触发: 已启用" : "宏触发: 已禁用";
+                _trayIcon!.Text = _isMacroTriggerEnabled
+                    ? "MacroKeyboard - 运行中"
+                    : "MacroKeyboard - 宏触发已禁用";
+                Dispatcher.Invoke(() =>
+                {
+                    TriggerDisabledBadge.Visibility = _isMacroTriggerEnabled
+                        ? Visibility.Collapsed
+                        : Visibility.Visible;
+                });
+            };
+            contextMenu.Items.Add(toggleTriggerItem);
+
+            contextMenu.Items.Add("-");
             contextMenu.Items.Add("退出", null, (_, _) =>
             {
                 _isReallyClosing = true;
@@ -132,6 +154,10 @@ namespace MacroKeyboard
         {
             // F9/F10/Esc 始终放行（控制键）
             if (vkCode == VK_F9 || vkCode == VK_F10 || vkCode == VK_ESCAPE)
+                return false;
+
+            // 宏触发禁用时不拦截
+            if (!_isMacroTriggerEnabled)
                 return false;
 
             // 如果有任何宏在回放，拦截所有已绑定的触发键（防止传给前台应用）
@@ -190,7 +216,7 @@ namespace MacroKeyboard
                 }
 
                 // 检查是否匹配某个宏的触发键
-                if (!_recorder.IsRecording)
+                if (!_recorder.IsRecording && _isMacroTriggerEnabled)
                 {
                     var macro = _macros.FirstOrDefault(m => m.IsEnabled && m.TriggerType == Models.TriggerType.Keyboard && m.TriggerVirtualKeyCode == vkCode && m.TriggerVirtualKeyCode != 0);
                     if (macro != null)
@@ -212,6 +238,10 @@ namespace MacroKeyboard
 
         private bool ShouldSuppressMouseButton(int button, bool isDown)
         {
+            // 宏触发禁用时不拦截
+            if (!_isMacroTriggerEnabled)
+                return false;
+
             // 如果有任何宏在回放，拦截所有绑定为鼠标触发键的按钮
             if (_player.IsPlaying)
             {
@@ -236,7 +266,7 @@ namespace MacroKeyboard
                 }
 
                 // 检查是否匹配某个宏的鼠标触发键
-                if (!_recorder.IsRecording)
+                if (!_recorder.IsRecording && _isMacroTriggerEnabled)
                 {
                     var macro = _macros.FirstOrDefault(m => m.IsEnabled && m.TriggerType == Models.TriggerType.Mouse && m.TriggerMouseButton == button);
                     if (macro != null)

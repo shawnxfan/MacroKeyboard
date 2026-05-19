@@ -16,4 +16,7 @@ Desktop.ini
 ## Publish artifacts
 publish/
 publish-lite/
+publish-self-contained/
+publish-framework-dependent/
 *.zip
+_create_release.py

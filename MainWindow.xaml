@@ -40,6 +40,11 @@
 
                 <!-- 状态指示 -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border x:Name="TriggerDisabledBadge" Background="#E53935" CornerRadius="3"
+                            Padding="6,2" Margin="0,0,12,0" VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                        <TextBlock Text="⚠ 宏触发已禁用" FontSize="10" Foreground="White" FontWeight="Bold"/>
+                    </Border>
                     <Ellipse x:Name="StatusDot" Width="10" Height="10" Margin="0,0,8,0">
                         <Ellipse.Fill>
                             <SolidColorBrush Color="{StaticResource SuccessColor}"/>
