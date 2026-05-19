@@ -83,6 +83,16 @@ namespace MacroKeyboard.Services
         /// </summary>
         private readonly ConcurrentDictionary<string, CancellationTokenSource> _activeMacros = new();
 
+        /// <summary>
+        /// 跟踪每个宏当前按下但尚未释放的按键（VK 码）
+        /// </summary>
+        private readonly ConcurrentDictionary<string, HashSet<ushort>> _pressedKeys = new();
+
+        /// <summary>
+        /// 跟踪每个宏当前按下但尚未释放的鼠标按钮
+        /// </summary>
+        private readonly ConcurrentDictionary<string, HashSet<int>> _pressedMouseButtons = new();
+
         /// <summary>任意宏正在回放</summary>
         public bool IsPlaying => !_activeMacros.IsEmpty;
 
@@ -117,6 +127,10 @@ namespace MacroKeyboard.Services
                 return;
             }
 
+            // 初始化按键跟踪
+            _pressedKeys[macro.Id] = new HashSet<ushort>();
+            _pressedMouseButtons[macro.Id] = new HashSet<int>();
+
             PlaybackStarted?.Invoke(macro.Id);
 
             try
@@ -139,7 +153,7 @@ namespace MacroKeyboard.Services
                                 await Task.Delay(delay, cts.Token);
                         }
 
-                        ExecuteEvent(evt);
+                        ExecuteEvent(evt, macro.Id);
                         PlaybackProgress?.Invoke(macro.Id, i + 1, macro.Events.Count);
                     }
                 }
@@ -147,7 +161,12 @@ namespace MacroKeyboard.Services
             catch (OperationCanceledException) { }
             finally
             {
+                // 释放所有残留的按键和鼠标按钮
+                ReleaseAllPressedKeys(macro.Id);
+
                 _activeMacros.TryRemove(macro.Id, out _);
+                _pressedKeys.TryRemove(macro.Id, out _);
+                _pressedMouseButtons.TryRemove(macro.Id, out _);
                 cts.Dispose();
                 PlaybackStopped?.Invoke(macro.Id);
             }
@@ -167,20 +186,28 @@ namespace MacroKeyboard.Services
                 kvp.Value.Cancel();
         }
 
-        private void ExecuteEvent(MacroEvent evt)
+        private void ExecuteEvent(MacroEvent evt, string macroId)
         {
             switch (evt.Type)
             {
                 case MacroEventType.KeyDown:
+                    if (_pressedKeys.TryGetValue(macroId, out var keys))
+                        keys.Add((ushort)evt.VirtualKeyCode);
                     SendKeyInput((ushort)evt.VirtualKeyCode, KEYEVENTF_KEYDOWN);
                     break;
                 case MacroEventType.KeyUp:
+                    if (_pressedKeys.TryGetValue(macroId, out var keysUp))
+                        keysUp.Remove((ushort)evt.VirtualKeyCode);
                     SendKeyInput((ushort)evt.VirtualKeyCode, KEYEVENTF_KEYUP);
                     break;
                 case MacroEventType.MouseDown:
+                    if (_pressedMouseButtons.TryGetValue(macroId, out var btns))
+                        btns.Add(evt.MouseButton);
                     SendMouseButton(evt.X, evt.Y, evt.MouseButton, true);
                     break;
                 case MacroEventType.MouseUp:
+                    if (_pressedMouseButtons.TryGetValue(macroId, out var btnsUp))
+                        btnsUp.Remove(evt.MouseButton);
                     SendMouseButton(evt.X, evt.Y, evt.MouseButton, false);
                     break;
                 case MacroEventType.MouseMove:
@@ -190,6 +217,62 @@ namespace MacroKeyboard.Services
                     SendMouseWheel(evt.X, evt.Y, evt.WheelDelta);
                     break;
             }
+        }
+
+        /// <summary>
+        /// 释放指定宏所有残留的按键和鼠标按钮
+        /// </summary>
+        private void ReleaseAllPressedKeys(string macroId)
+        {
+            // 释放所有残留的键盘按键
+            if (_pressedKeys.TryGetValue(macroId, out var keys))
+            {
+                foreach (var vk in keys)
+                {
+                    SendKeyInput(vk, KEYEVENTF_KEYUP);
+                }
+                keys.Clear();
+            }
+
+            // 释放所有残留的鼠标按钮
+            if (_pressedMouseButtons.TryGetValue(macroId, out var buttons))
+            {
+                foreach (var btn in buttons)
+                {
+                    // 使用当前鼠标位置释放
+                    SendMouseButtonRelease(btn);
+                }
+                buttons.Clear();
+            }
+        }
+
+        /// <summary>
+        /// 释放鼠标按钮（不移动鼠标位置）
+        /// </summary>
+        private void SendMouseButtonRelease(int button)
+        {
+            uint flags = button switch
+            {
+                0 => MOUSEEVENTF_LEFTUP,
+                1 => MOUSEEVENTF_RIGHTUP,
+                2 => MOUSEEVENTF_MIDDLEUP,
+                _ => 0
+            };
+            if (flags == 0) return;
+
+            var input = new INPUT
+            {
+                type = INPUT_MOUSE,
+                u = new INPUTUNION
+                {
+                    mi = new MOUSEINPUT
+                    {
+                        dwFlags = flags,
+                        dwExtraInfo = GlobalHookManager.INJECTED_FLAG
+                    }
+                }
+            };
+            SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
         }
 
         private void SendKeyInput(ushort vk, uint flags)

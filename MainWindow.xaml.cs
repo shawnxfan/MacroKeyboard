@@ -437,6 +437,9 @@ namespace MacroKeyboard
 
             if (vkCode == VK_F9 || vkCode == VK_F10 || vkCode == VK_ESCAPE)
             {
+                _isBindingTriggerKey = false;
+                TriggerKeyBox.Text = string.IsNullOrEmpty(_selectedMacro.TriggerKey) ? "点击此处设置..." : _selectedMacro.TriggerKey;
+                TriggerKeyBox.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x3C));
                 MessageBox.Show("F9、F10、Esc 为系统保留键，不能作为触发键。", "提示",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -445,6 +448,9 @@ namespace MacroKeyboard
             var conflict = _macros.FirstOrDefault(m => m.Id != _selectedMacro.Id && m.TriggerType == Models.TriggerType.Keyboard && m.TriggerVirtualKeyCode == vkCode);
             if (conflict != null)
             {
+                _isBindingTriggerKey = false;
+                TriggerKeyBox.Text = string.IsNullOrEmpty(_selectedMacro.TriggerKey) ? "点击此处设置..." : _selectedMacro.TriggerKey;
+                TriggerKeyBox.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x3C));
                 MessageBox.Show($"此按键已绑定给宏「{conflict.Name}」，请选择其他按键。", "冲突",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -471,6 +477,9 @@ namespace MacroKeyboard
             // 左键不允许作为触发键（太容易误触）
             if (button == 0)
             {
+                _isBindingTriggerKey = false;
+                TriggerKeyBox.Text = string.IsNullOrEmpty(_selectedMacro.TriggerKey) ? "点击此处设置..." : _selectedMacro.TriggerKey;
+                TriggerKeyBox.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x3C));
                 MessageBox.Show("鼠标左键不能作为触发键（容易误触）。\n建议使用侧键或中键。", "提示",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
@@ -479,6 +488,9 @@ namespace MacroKeyboard
             var conflict = _macros.FirstOrDefault(m => m.Id != _selectedMacro.Id && m.TriggerType == Models.TriggerType.Mouse && m.TriggerMouseButton == button);
             if (conflict != null)
             {
+                _isBindingTriggerKey = false;
+                TriggerKeyBox.Text = string.IsNullOrEmpty(_selectedMacro.TriggerKey) ? "点击此处设置..." : _selectedMacro.TriggerKey;
+                TriggerKeyBox.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x3C));
                 MessageBox.Show($"此鼠标按键已绑定给宏「{conflict.Name}」，请选择其他按键。", "冲突",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
