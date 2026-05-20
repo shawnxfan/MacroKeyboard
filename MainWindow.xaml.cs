@@ -24,9 +24,11 @@ namespace MacroKeyboard
 
         private List<MacroDefinition> _macros;
         private MacroDefinition? _selectedMacro;
+        private int _currentSequenceIndex; // 当前选中的序列索引
         private OverlayWindow? _overlay;
         private Forms.NotifyIcon? _trayIcon;
         private bool _isReallyClosing;
+        private bool _isRefreshingMacroList; // 防止刷新列表时重置序列索引
 
         // 触发键绑定状态
         private bool _isBindingTriggerKey;
@@ -41,6 +43,15 @@ namespace MacroKeyboard
 
         // 录制用的固定 ID（Overlay 用）
         private const string RECORDING_OVERLAY_ID = "__recording__";
+
+        /// <summary>获取当前选中宏的当前选中序列</summary>
+        private MacroSequence? CurrentSequence =>
+            _selectedMacro != null && _currentSequenceIndex < _selectedMacro.Sequences.Count
+                ? _selectedMacro.Sequences[_currentSequenceIndex]
+                : null;
+
+        /// <summary>获取当前序列的事件列表（简写）</summary>
+        private List<MacroEvent>? CurrentEvents => CurrentSequence?.Events;
 
         public MainWindow()
         {
@@ -91,9 +102,15 @@ namespace MacroKeyboard
 
         private void InitializeTrayIcon()
         {
+            // 加载自定义图标
+            var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+            var appIcon = System.IO.File.Exists(iconPath)
+                ? new System.Drawing.Icon(iconPath)
+                : SystemIcons.Application;
+
             _trayIcon = new Forms.NotifyIcon
             {
-                Icon = SystemIcons.Application,
+                Icon = appIcon,
                 Text = "MacroKeyboard - 运行中",
                 Visible = true
             };
@@ -303,13 +320,14 @@ namespace MacroKeyboard
         private void StopRecording()
         {
             var events = _recorder.StopRecording();
-            if (_selectedMacro != null && events.Count > 0)
+            if (_selectedMacro != null && events.Count > 0 && CurrentSequence != null)
             {
-                _selectedMacro.Events = events;
+                CurrentSequence.Events = events;
                 _selectedMacro.UpdatedAt = DateTime.Now;
                 _storage.Save(_selectedMacro, _macros);
                 RefreshMacroList();
                 UpdateEventList();
+                RefreshSequenceTabs();
             }
         }
 
@@ -363,7 +381,7 @@ namespace MacroKeyboard
 
         private void HandlePlayback()
         {
-            if (_selectedMacro == null || _selectedMacro.Events.Count == 0) return;
+            if (_selectedMacro == null || _selectedMacro.TotalEventCount == 0) return;
             if (_recorder.IsRecording) return;
             if (_player.IsMacroPlaying(_selectedMacro.Id)) return;
 
@@ -566,7 +584,10 @@ namespace MacroKeyboard
                     RecordButton.IsEnabled = true;
                 }
 
+                if (!_isRefreshingMacroList)
+                    _currentSequenceIndex = 0;
                 UpdateEventList();
+                RefreshSequenceTabs();
             }
         }
 
@@ -574,7 +595,8 @@ namespace MacroKeyboard
         {
             var macro = new MacroDefinition
             {
-                Name = $"宏 {_macros.Count + 1}"
+                Name = $"宏 {_macros.Count + 1}",
+                Sequences = { new MacroSequence() }
             };
             _macros.Add(macro);
             _storage.SaveAll(_macros);
@@ -678,13 +700,13 @@ namespace MacroKeyboard
 
         private void AddKeyEvent_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedMacro == null) return;
+            if (_selectedMacro == null || CurrentEvents == null) return;
 
             var dialog = new EventEditDialog();
             dialog.Owner = this;
             if (dialog.ShowDialog() == true && dialog.ResultEvent != null)
             {
-                int insertIndex = EventList.SelectedIndex >= 0 ? EventList.SelectedIndex + 1 : _selectedMacro.Events.Count;
+                int insertIndex = EventList.SelectedIndex >= 0 ? EventList.SelectedIndex + 1 : CurrentEvents.Count;
 
                 if (dialog.InsertKeyPress)
                 {
@@ -697,12 +719,12 @@ namespace MacroKeyboard
                         KeyName = downEvt.KeyName,
                         DelayMs = 30 // 默认 30ms 间隔
                     };
-                    _selectedMacro.Events.Insert(insertIndex, downEvt);
-                    _selectedMacro.Events.Insert(insertIndex + 1, upEvt);
+                    CurrentEvents.Insert(insertIndex, downEvt);
+                    CurrentEvents.Insert(insertIndex + 1, upEvt);
                 }
                 else
                 {
-                    _selectedMacro.Events.Insert(insertIndex, dialog.ResultEvent);
+                    CurrentEvents.Insert(insertIndex, dialog.ResultEvent);
                 }
 
                 SaveAndRefreshEvents();
@@ -711,7 +733,7 @@ namespace MacroKeyboard
 
         private void AddDelayEvent_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedMacro == null) return;
+            if (_selectedMacro == null || CurrentEvents == null) return;
 
             // 快捷添加延迟 — 直接弹输入框
             var dialog = new EventEditDialog();
@@ -725,8 +747,8 @@ namespace MacroKeyboard
 
             if (dialog.ShowDialog() == true && dialog.ResultEvent != null)
             {
-                int insertIndex = EventList.SelectedIndex >= 0 ? EventList.SelectedIndex + 1 : _selectedMacro.Events.Count;
-                _selectedMacro.Events.Insert(insertIndex, dialog.ResultEvent);
+                int insertIndex = EventList.SelectedIndex >= 0 ? EventList.SelectedIndex + 1 : CurrentEvents!.Count;
+                CurrentEvents!.Insert(insertIndex, dialog.ResultEvent);
                 SaveAndRefreshEvents();
             }
         }
@@ -743,18 +765,18 @@ namespace MacroKeyboard
 
         private void EditSelectedEvent()
         {
-            if (_selectedMacro == null || EventList.SelectedIndex < 0) return;
+            if (_selectedMacro == null || CurrentEvents == null || EventList.SelectedIndex < 0) return;
 
             int index = EventList.SelectedIndex;
-            if (index >= _selectedMacro.Events.Count) return;
+            if (index >= CurrentEvents.Count) return;
 
-            var existingEvent = _selectedMacro.Events[index];
+            var existingEvent = CurrentEvents[index];
             var dialog = new EventEditDialog(existingEvent);
             dialog.Owner = this;
 
             if (dialog.ShowDialog() == true && dialog.ResultEvent != null)
             {
-                _selectedMacro.Events[index] = dialog.ResultEvent;
+                CurrentEvents[index] = dialog.ResultEvent;
                 SaveAndRefreshEvents();
                 // 保持选中
                 if (index < EventList.Items.Count)
@@ -764,41 +786,41 @@ namespace MacroKeyboard
 
         private void DeleteEvent_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedMacro == null || EventList.SelectedIndex < 0) return;
+            if (_selectedMacro == null || CurrentEvents == null || EventList.SelectedIndex < 0) return;
 
             int index = EventList.SelectedIndex;
-            if (index >= _selectedMacro.Events.Count) return;
+            if (index >= CurrentEvents.Count) return;
 
-            _selectedMacro.Events.RemoveAt(index);
+            CurrentEvents.RemoveAt(index);
             SaveAndRefreshEvents();
 
             // 选中相邻项
-            if (_selectedMacro.Events.Count > 0)
-                EventList.SelectedIndex = Math.Min(index, _selectedMacro.Events.Count - 1);
+            if (CurrentEvents.Count > 0)
+                EventList.SelectedIndex = Math.Min(index, CurrentEvents.Count - 1);
         }
 
         private void MoveEventUp_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedMacro == null || EventList.SelectedIndex <= 0) return;
+            if (_selectedMacro == null || CurrentEvents == null || EventList.SelectedIndex <= 0) return;
 
             int index = EventList.SelectedIndex;
-            var evt = _selectedMacro.Events[index];
-            _selectedMacro.Events.RemoveAt(index);
-            _selectedMacro.Events.Insert(index - 1, evt);
+            var evt = CurrentEvents[index];
+            CurrentEvents.RemoveAt(index);
+            CurrentEvents.Insert(index - 1, evt);
             SaveAndRefreshEvents();
             EventList.SelectedIndex = index - 1;
         }
 
         private void MoveEventDown_Click(object sender, RoutedEventArgs e)
         {
-            if (_selectedMacro == null || EventList.SelectedIndex < 0) return;
+            if (_selectedMacro == null || CurrentEvents == null || EventList.SelectedIndex < 0) return;
 
             int index = EventList.SelectedIndex;
-            if (index >= _selectedMacro.Events.Count - 1) return;
+            if (index >= CurrentEvents.Count - 1) return;
 
-            var evt = _selectedMacro.Events[index];
-            _selectedMacro.Events.RemoveAt(index);
-            _selectedMacro.Events.Insert(index + 1, evt);
+            var evt = CurrentEvents[index];
+            CurrentEvents.RemoveAt(index);
+            CurrentEvents.Insert(index + 1, evt);
             SaveAndRefreshEvents();
             EventList.SelectedIndex = index + 1;
         }
@@ -814,29 +836,98 @@ namespace MacroKeyboard
 
         #endregion
 
+        #region 序列管理
+
+        private void AddSequence_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMacro == null) return;
+
+            var newSeq = new MacroSequence { Name = $"序列 {_selectedMacro.Sequences.Count + 1}" };
+            _selectedMacro.Sequences.Add(newSeq);
+            _currentSequenceIndex = _selectedMacro.Sequences.Count - 1;
+            SaveAndRefreshEvents();
+            RefreshSequenceTabs();
+        }
+
+        private void RemoveSequence_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedMacro == null || _selectedMacro.Sequences.Count <= 1) return;
+
+            _selectedMacro.Sequences.RemoveAt(_currentSequenceIndex);
+            _currentSequenceIndex = Math.Min(_currentSequenceIndex, _selectedMacro.Sequences.Count - 1);
+            SaveAndRefreshEvents();
+            RefreshSequenceTabs();
+        }
+
+        private void SwitchSequence(int index)
+        {
+            if (_selectedMacro == null || index < 0 || index >= _selectedMacro.Sequences.Count) return;
+
+            _currentSequenceIndex = index;
+            UpdateEventList();
+            RefreshSequenceTabs();
+        }
+
+        private void RefreshSequenceTabs()
+        {
+            SequenceTabs.Items.Clear();
+            if (_selectedMacro == null) return;
+
+            for (int i = 0; i < _selectedMacro.Sequences.Count; i++)
+            {
+                var seq = _selectedMacro.Sequences[i];
+                var btn = new System.Windows.Controls.Button
+                {
+                    Content = seq.Name,
+                    FontSize = 11,
+                    Padding = new Thickness(8, 3, 8, 3),
+                    Margin = new Thickness(0, 0, 4, 0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Tag = i
+                };
+
+                if (i == _currentSequenceIndex)
+                {
+                    btn.Style = (Style)FindResource("ModernButton");
+                }
+                else
+                {
+                    btn.Style = (Style)FindResource("GhostButton");
+                }
+
+                int capturedIndex = i;
+                btn.Click += (_, _) => SwitchSequence(capturedIndex);
+                SequenceTabs.Items.Add(btn);
+            }
+        }
+
+        #endregion
+
         #region 辅助方法
 
         private void RefreshMacroList()
         {
+            _isRefreshingMacroList = true;
             var selected = _selectedMacro;
             MacroList.ItemsSource = null;
             MacroList.ItemsSource = _macros;
             if (selected != null)
                 MacroList.SelectedItem = _macros.FirstOrDefault(m => m.Id == selected.Id);
+            _isRefreshingMacroList = false;
         }
 
         private void UpdateEventList()
         {
             EventList.Items.Clear();
-            if (_selectedMacro == null) return;
+            if (_selectedMacro == null || CurrentEvents == null) return;
 
-            foreach (var evt in _selectedMacro.Events)
+            foreach (var evt in CurrentEvents)
             {
                 EventList.Items.Add(FormatEvent(evt));
             }
 
-            EventCountText.Text = $"事件列表（{_selectedMacro.Events.Count} 个事件）";
-            DurationText.Text = _selectedMacro.Events.Count > 0 ? $"总时长: {_selectedMacro.DurationInfo}" : "";
+            EventCountText.Text = $"事件列表（{CurrentEvents.Count} 个事件，序列 {_currentSequenceIndex + 1}/{_selectedMacro.Sequences.Count}）";
+            DurationText.Text = CurrentEvents.Count > 0 ? $"总时长: {_selectedMacro.DurationInfo}" : "";
         }
 
         private void SetStatus(string text, bool isActive)

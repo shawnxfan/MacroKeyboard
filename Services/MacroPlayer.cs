@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -115,7 +116,7 @@ namespace MacroKeyboard.Services
         /// </summary>
         public async Task PlayAsync(MacroDefinition macro)
         {
-            if (macro.Events.Count == 0) return;
+            if (macro.Sequences.Count == 0 || macro.Sequences.All(s => s.Events.Count == 0)) return;
 
             // 如果该宏已在回放，不重复启动
             if (_activeMacros.ContainsKey(macro.Id)) return;
@@ -139,23 +140,15 @@ namespace MacroKeyboard.Services
 
                 for (int repeat = 0; repeat < repeatCount; repeat++)
                 {
-                    for (int i = 0; i < macro.Events.Count; i++)
-                    {
-                        cts.Token.ThrowIfCancellationRequested();
+                    cts.Token.ThrowIfCancellationRequested();
 
-                        var evt = macro.Events[i];
+                    // 所有序列并行执行
+                    var tasks = macro.Sequences
+                        .Where(s => s.Events.Count > 0)
+                        .Select(seq => PlaySequenceAsync(seq, macro.Id, macro.PlaybackSpeed, cts.Token))
+                        .ToArray();
 
-                        // 延迟（按回放速度调整）
-                        if (evt.DelayMs > 0)
-                        {
-                            int delay = (int)(evt.DelayMs / macro.PlaybackSpeed);
-                            if (delay > 0)
-                                await Task.Delay(delay, cts.Token);
-                        }
-
-                        ExecuteEvent(evt, macro.Id);
-                        PlaybackProgress?.Invoke(macro.Id, i + 1, macro.Events.Count);
-                    }
+                    await Task.WhenAll(tasks);
                 }
             }
             catch (OperationCanceledException) { }
@@ -169,6 +162,29 @@ namespace MacroKeyboard.Services
                 _pressedMouseButtons.TryRemove(macro.Id, out _);
                 cts.Dispose();
                 PlaybackStopped?.Invoke(macro.Id);
+            }
+        }
+
+        /// <summary>
+        /// 播放单个序列（内部方法，由 PlayAsync 并行调用）
+        /// </summary>
+        private async Task PlaySequenceAsync(MacroSequence sequence, string macroId, double playbackSpeed, CancellationToken token)
+        {
+            for (int i = 0; i < sequence.Events.Count; i++)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var evt = sequence.Events[i];
+
+                // 延迟（按回放速度调整）
+                if (evt.DelayMs > 0)
+                {
+                    int delay = (int)(evt.DelayMs / playbackSpeed);
+                    if (delay > 0)
+                        await Task.Delay(delay, token);
+                }
+
+                ExecuteEvent(evt, macroId);
             }
         }
 

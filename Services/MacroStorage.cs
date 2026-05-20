@@ -33,7 +33,24 @@ namespace MacroKeyboard.Services
             try
             {
                 var json = File.ReadAllText(_indexFile);
-                return JsonConvert.DeserializeObject<List<MacroDefinition>>(json) ?? new();
+                var settings = new JsonSerializerSettings
+                {
+                    ObjectCreationHandling = ObjectCreationHandling.Replace
+                };
+                var macros = JsonConvert.DeserializeObject<List<MacroDefinition>>(json, settings) ?? new();
+
+                // 清理可能因旧版 bug 积累的空白序列（保留至少一个非空序列）
+                foreach (var macro in macros)
+                {
+                    if (macro.Sequences.Count > 1)
+                    {
+                        macro.Sequences.RemoveAll(s => s.Events.Count == 0);
+                        if (macro.Sequences.Count == 0)
+                            macro.Sequences.Add(new MacroSequence());
+                    }
+                }
+
+                return macros;
             }
             catch
             {
