@@ -102,11 +102,20 @@ namespace MacroKeyboard
 
         private void InitializeTrayIcon()
         {
-            // 加载自定义图标
-            var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
-            var appIcon = System.IO.File.Exists(iconPath)
-                ? new System.Drawing.Icon(iconPath)
-                : SystemIcons.Application;
+            // 从嵌入资源加载图标
+            System.Drawing.Icon appIcon;
+            try
+            {
+                var resourceUri = new Uri("pack://application:,,,/app.ico", UriKind.Absolute);
+                var streamInfo = System.Windows.Application.GetResourceStream(resourceUri);
+                appIcon = streamInfo != null
+                    ? new System.Drawing.Icon(streamInfo.Stream)
+                    : SystemIcons.Application;
+            }
+            catch
+            {
+                appIcon = SystemIcons.Application;
+            }
 
             _trayIcon = new Forms.NotifyIcon
             {
