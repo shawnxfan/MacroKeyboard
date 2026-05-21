@@ -18,5 +18,7 @@ publish/
 publish-lite/
 publish-self-contained/
 publish-framework-dependent/
+publish-test/
+MacroKeyboard-v*/
 *.zip
 _create_release.py
