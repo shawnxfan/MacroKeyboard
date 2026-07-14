@@ -138,18 +138,13 @@ namespace MacroKeyboard.Services
             {
                 int repeatCount = macro.RepeatCount <= 0 ? int.MaxValue : macro.RepeatCount;
 
-                for (int repeat = 0; repeat < repeatCount; repeat++)
-                {
-                    cts.Token.ThrowIfCancellationRequested();
+                // 各序列按自身时长独立循环，互不等待
+                var tasks = macro.Sequences
+                    .Where(s => s.Events.Count > 0)
+                    .Select(seq => PlaySequenceAsync(seq, macro.Id, macro.PlaybackSpeed, repeatCount, cts.Token))
+                    .ToArray();
 
-                    // 所有序列并行执行
-                    var tasks = macro.Sequences
-                        .Where(s => s.Events.Count > 0)
-                        .Select(seq => PlaySequenceAsync(seq, macro.Id, macro.PlaybackSpeed, cts.Token))
-                        .ToArray();
-
-                    await Task.WhenAll(tasks);
-                }
+                await Task.WhenAll(tasks);
             }
             catch (OperationCanceledException) { }
             finally
@@ -166,25 +161,30 @@ namespace MacroKeyboard.Services
         }
 
         /// <summary>
-        /// 播放单个序列（内部方法，由 PlayAsync 并行调用）
+        /// 播放单个序列并按自身时长独立循环（内部方法，由 PlayAsync 并行调用）
         /// </summary>
-        private async Task PlaySequenceAsync(MacroSequence sequence, string macroId, double playbackSpeed, CancellationToken token)
+        private async Task PlaySequenceAsync(MacroSequence sequence, string macroId, double playbackSpeed, int repeatCount, CancellationToken token)
         {
-            for (int i = 0; i < sequence.Events.Count; i++)
+            for (int repeat = 0; repeat < repeatCount; repeat++)
             {
                 token.ThrowIfCancellationRequested();
 
-                var evt = sequence.Events[i];
-
-                // 延迟（按回放速度调整）
-                if (evt.DelayMs > 0)
+                for (int i = 0; i < sequence.Events.Count; i++)
                 {
-                    int delay = (int)(evt.DelayMs / playbackSpeed);
-                    if (delay > 0)
-                        await Task.Delay(delay, token);
-                }
+                    token.ThrowIfCancellationRequested();
 
-                ExecuteEvent(evt, macroId);
+                    var evt = sequence.Events[i];
+
+                    // 延迟（按回放速度调整）
+                    if (evt.DelayMs > 0)
+                    {
+                        int delay = (int)(evt.DelayMs / playbackSpeed);
+                        if (delay > 0)
+                            await Task.Delay(delay, token);
+                    }
+
+                    ExecuteEvent(evt, macroId);
+                }
             }
         }
 
